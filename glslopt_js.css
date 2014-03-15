@@ -1,0 +1,18 @@
+.textbox {
+    display: block;
+    unicode-bidi: embed;
+    font-family: monospace;
+    white-space: pre;
+    overflow: scroll;
+    overflow-x: hidden;
+    border-width: 2;
+    border-style: dashed;
+}
+
+.source {
+    border-color: green;
+}
+
+.optimized {
+    border-color: red;
+}
