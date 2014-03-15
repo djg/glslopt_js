@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>glslopt.js demo</title>
+    <link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css">
+    <link rel="stylesheet" href="glslopt_js.css">
+  </head>
+  <body>
+    <div id="input" class="source textbox" contenteditable=true></div>
+    <div class="btn-toolbar" role="toolbar">
+      <div id="shader-type" class="btn-group" data-toggle="buttons">
+        <label id="vs" class="btn btn-primary active">
+          <input type="radio">Vertex Shader
+        </label>
+        <label id="fs" class="btn btn-primary">
+          <input type="radio">Fragment Shader
+        </label>
+      </div>
+      <div id="target-type" class="btn-group" data-toggle="buttons">
+        <label id="glsl" class="btn btn-primary">
+          <input type="radio">GLSL
+        </label>
+        <label id="essl2" class="btn btn-primary active">
+          <input type="radio">ESSL 2
+        </label>
+        <label id="essl3" class="btn btn-primary">
+          <input type="radio">ESSL 3
+        </label>
+      </div>
+    </div>
+    <div id="output" class="optimized textbox"></div>
+    <div id="log" class="textbox"></div>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
+    <script src="http://netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js"></script>
+    <script src="libglsl_optimizer.js"></script>
+    <script id="vertexShader" type="x-shader/x-vertex">attribute vec4 aPosition;
+void main() {
+    gl_Position = aPosition;
+}</script>
+    <script id="fragmentShader" type="x-shader/x-fragment"> precision mediump float;
+uniform float uColor;
+void main() {
+    gl_FragColor = vec4(uColor, uColor, uColor, 1);
+}</script>
+    <script>
+     var glslopt = (function() {
+
+       // glslopt_ctx* glslopt_initialize (glslopt_target target);
+       var initialize = Module.cwrap('glslopt_initialize', 'number', ['number']);
+
+       // void glslopt_cleanup (glslopt_ctx* ctx);
+       var cleanup = Module.cwrap('glslopt_cleanup', 'void', ['number']);
+
+       // void glslopt_set_max_unroll_iterations (glslopt_ctx* ctx, unsigned iterations);
+       var setMaxUnrollIterations = Module.cwrap('glslopt_set_max_unroll_iterations', 'void', ['number', 'number']);
+
+       // glslopt_shader* glslopt_optimize (glslopt_ctx* ctx, glslopt_shader_type type, const char* shaderSource, unsigned options);
+       var optimize = Module.cwrap('glslopt_optimize', 'number', ['number', 'number', 'string', 'number']);
+
+       //bool glslopt_get_status (glslopt_shader* shader);
+       var getStatus = Module.cwrap('glslopt_get_status', 'boolean', ['number']);
+
+       //const char* glslopt_get_output (glslopt_shader* shader);
+       var getOutput = Module.cwrap('glslopt_get_output', 'string', ['number']);
+
+       //const char* glslopt_get_raw_output (glslopt_shader* shader);
+       var getRawOutput = Module.cwrap('glslopt_get_raw_output', 'string', ['number']);
+
+       //const char* glslopt_get_log (glslopt_shader* shader);
+       var getLog = Module.cwrap('glslopt_get_log', 'string', ['number']);
+
+       //void glslopt_shader_delete (glslopt_shader* shader);
+       var shaderDelete = Module.cwrap('glslopt_shader_delete', 'void', ['number']);
+
+       //int glslopt_shader_get_input_count (glslopt_shader* shader);
+       var shaderGetInputCount = Module.cwrap('glslopt_shader_get_input_count', 'number', ['number']);
+
+       //const char* glslopt_shader_get_input_name (glslopt_shader* shader, int index);
+       var shaderGetInputName = Module.cwrap('glslopt_shader_get_input_name', 'string', ['number']);
+
+       //void glslopt_shader_get_stats (glslopt_shader* shader, int* approxMath, int* approxTex, int* approxFlow);
+
+     return {
+       // enum glslopt_shader_type
+       kGlslOptShaderVertex: 0,
+       kGlslOptShaderFragment: 1,
+
+       // Options flags for glsl_optimize
+       // enum glslopt_options
+       kGlslOptionSkipPreprocessor: (1<<0), // Skip preprocessing shader source. Saves some time if you know you don't need it.
+       kGlslOptionNotFullShader:  (1<<1), // Passed shader is not the full shader source. This makes some optimizations weaker.
+       // Optimizer target language
+       // enum glslopt_target
+       kGlslTargetOpenGL: 0,
+       kGlslTargetOpenGLES20: 1,
+       kGlslTargetOpenGLES30: 2,
+
+       initialize: initialize,
+       cleanup: cleanup,
+       setMaxUnrollIterations: setMaxUnrollIterations,
+       optimize: optimize,
+       getStatus: getStatus,
+       getOutput: getOutput,
+       getRawOutput: getRawOutput,
+       getLog: getLog,
+       shaderDelete: shaderDelete,
+       shaderGetInputCount: shaderGetInputCount,
+       shaderGetInputName: shaderGetInputName,
+       //void glslopt_shader_get_stats (glslopt_shader* shader, int* approxMath, int* approxTex, int* approxFlow);
+     };
+     })();
+
+     var shaderType = 'vs';
+     var targetType = 'essl2';
+     var textboxes = {};
+
+     function loadShaderFromScript(scriptId)
+     {
+       var shaderScript = document.getElementById(scriptId);
+       if (!shaderScript) {
+         return '';
+       }
+
+       return shaderScript.text;
+     }
+
+     function shaderTypeFor(str) {
+       switch (str) {
+         case 'vs': return glslopt.kGlslOptShaderVertex;
+         case 'fs': return glslopt.kGlslOptShaderFragment;
+         default:
+           alert('unhandled: ' + str + '!');
+       }
+     }
+
+     function targetTypeFor(str) {
+       switch (str) {
+         case 'glsl': return glslopt.kGlslTargetOpenGL;
+         case 'essl2': return glslopt.kGlslTargetOpenGLES20;
+         case 'essl3': return glslopt.kGlslTargetOpenGLES30;
+         default:
+           alert('unhandled: ' + str + '!');
+       }
+     }
+
+     function optimizeShader(source) {
+       var ctx = glslopt.initialize(targetTypeFor(targetType));
+       var shader = glslopt.optimize(ctx, shaderTypeFor(shaderType), source, 0);
+
+       var output, log;
+       var success = glslopt.getStatus(shader);
+       if (success) {
+         output = glslopt.getOutput(shader);
+       }
+       log = glslopt.getLog(shader);
+
+       glslopt.shaderDelete(shader);
+       glslopt.cleanup(ctx);
+
+       return { success: success, output: output, log: log };
+     }
+
+     function optimizeCurrentShader() {
+       var source = textboxes.input.textContent;
+       // strip html tags
+       var result = optimizeShader(source);
+       if (result.success) {
+         textboxes.output.textContent = result.output;
+       }
+       textboxes.log.textContent = result.log;
+     }
+
+     function setupInputHandler()
+     {
+       textboxes.input.addEventListener('input', function() {
+         optimizeCurrentShader();
+       });
+     }
+
+     $(document).ready(function() {
+       $('#shader-type').find('label').bind('click', function(evt) {
+         console.log('click' + $(this).attr('id'));
+         shaderType = $(this).attr('id');
+         optimizeCurrentShader();
+       });
+
+       $('#target-type').find('label').bind('click', function(evt) {
+         console.log('click ' + $(this).attr('id'));
+         targetType = $(this).attr('id');
+         optimizeCurrentShader();
+       });
+
+       textboxes.input = document.getElementById('input');
+       textboxes.output = document.getElementById('output');
+       textboxes.log = document.getElementById('log');
+
+       textboxes.input.textContent = loadShaderFromScript('vertexShader');
+       optimizeCurrentShader();
+       setupInputHandler();
+     });
+    </script>
+  </body>
+</html>
